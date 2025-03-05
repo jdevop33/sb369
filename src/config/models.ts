@@ -2,29 +2,20 @@ import { ModelConfig } from '../types';
 
 export const models: ModelConfig[] = [
   {
-    id: 'claude-3-sonnet',
-    name: 'Claude 3 Sonnet',
+    id: 'claude-3-7-sonnet',
+    name: 'Claude 3.7 Sonnet',
     provider: 'anthropic',
-    model: 'claude-3-sonnet-20240229',
-    description: 'Balanced performance and intelligence',
+    model: 'claude-3-7-sonnet-20250219',
+    description: 'Anthropic\'s latest model with enhanced reasoning',
     maxTokens: 4096,
     temperature: 0.7
   },
   {
-    id: 'gpt-4-turbo',
-    name: 'GPT-4 Turbo',
+    id: 'gpt-4o',
+    name: 'GPT-4o',
     provider: 'openai',
-    model: 'gpt-4-turbo-preview',
-    description: 'Most capable OpenAI model',
-    maxTokens: 4096,
-    temperature: 0.7
-  },
-  {
-    id: 'gpt-4-5-turbo',
-    name: 'GPT-4.5 Turbo',
-    provider: 'openai',
-    model: 'gpt-4-0125-preview',
-    description: 'Latest OpenAI model with enhanced reasoning',
+    model: 'gpt-4o',
+    description: 'OpenAI\'s optimized flagship model',
     maxTokens: 4096,
     temperature: 0.7
   },

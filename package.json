@@ -11,7 +11,11 @@
     "ingest": "node scripts/ingestDocuments.js"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^1.1.14",
+    "@ai-sdk/openai": "^1.2.0",
+    "@ai-sdk/react": "^1.1.20",
     "@pinecone-database/pinecone": "^2.0.1",
+    "ai": "4.1",
     "cheerio": "^1.0.0-rc.12",
     "clsx": "^2.1.0",
     "dotenv": "^16.3.1",
@@ -27,7 +31,7 @@
     "remark-gfm": "^4.0.0",
     "tailwind-merge": "^2.2.1",
     "uuid": "^9.0.1",
-    "zod": "^3.22.4"
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.5",

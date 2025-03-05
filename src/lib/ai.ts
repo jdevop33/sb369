@@ -1,6 +1,9 @@
 import { ModelConfig } from '../types';
 import { BylawChunk } from '../types';
-import OpenAI from 'openai';
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+import { streamText, generateText, tool } from 'ai';
+import { z } from 'zod';
 
 // Helper function to get environment variables
 const getEnvVariable = (key: string): string | undefined => {
@@ -10,18 +13,13 @@ const getEnvVariable = (key: string): string | undefined => {
   return process.env[key];
 };
 
-// Initialize OpenAI client
-let openai: OpenAI | null = null;
-try {
-  openai = new OpenAI({
-    apiKey: getEnvVariable('OPENAI_API_KEY')
-  });
-} catch (error) {
-  console.warn('Failed to initialize OpenAI client:', error);
-}
+// Initialize API keys
+process.env.OPENAI_API_KEY = getEnvVariable('OPENAI_API_KEY');
+process.env.ANTHROPIC_API_KEY = getEnvVariable('ANTHROPIC_API_KEY');
+process.env.XAI_API_KEY = getEnvVariable('XAI_API_KEY');
 
 /**
- * Generate a response from the AI model
+ * Generate a response from the AI model using AI SDK
  * @param model The selected AI model configuration
  * @param messages The conversation history
  * @param relevantChunks Relevant bylaw chunks for context
@@ -68,42 +66,39 @@ ${context}`
       ...messages.filter(m => m.role !== 'system')
     ];
     
-    // Check if we have a valid OpenAI client
-    if (!openai) {
-      console.warn('OpenAI client not initialized, using simulated response');
-      return simulateAIResponse(messages[messages.length - 1]?.content || '', relevantChunks);
-    }
-    
-    // Select the appropriate model based on the provider
-    let modelName: string;
+    // Map model provider to AI SDK model and generate response based on provider
+    let response;
     switch (model.provider) {
       case 'anthropic':
-        // For Anthropic, we would use their API directly
-        // But for now, we'll fall back to OpenAI
-        console.warn('Anthropic API not yet implemented, using OpenAI instead');
-        modelName = 'gpt-4-turbo-preview';
-        break;
+        // Use generateText for Claude with reasoning capabilities
+        const result = await generateText({
+          model: anthropic(model.model),
+          messages: aiMessages,
+          temperature: model.temperature,
+          maxTokens: model.maxTokens,
+          providerOptions: {
+            anthropic: {
+              thinking: { type: 'enabled', budgetTokens: 12000 },
+            },
+          },
+        });
+        return result.text;
+        
       case 'xai':
-        // For XAI (Grok), we would use their API directly
-        // But for now, we'll fall back to OpenAI
-        console.warn('XAI API not yet implemented, using OpenAI instead');
-        modelName = 'gpt-4-turbo-preview';
-        break;
+        // TODO: Add support for XAI (Grok) when available in AI SDK
+        throw new Error('XAI provider not yet implemented in AI SDK');
+        
       case 'openai':
       default:
-        modelName = model.model;
-        break;
+        // Use streamText for OpenAI
+        const streamResult = await streamText({
+          model: openai(model.model),
+          messages: aiMessages,
+          temperature: model.temperature,
+          maxTokens: model.maxTokens,
+        });
+        return streamResult.text;
     }
-    
-    // Generate the response using OpenAI
-    const completion = await openai.chat.completions.create({
-      model: modelName,
-      messages: aiMessages.map(m => ({ role: m.role as any, content: m.content })),
-      temperature: model.temperature,
-      max_tokens: model.maxTokens,
-    });
-    
-    return completion.choices[0].message.content || "I couldn't generate a response. Please try again.";
     
   } catch (error) {
     console.error('Error generating AI response:', error);
@@ -175,7 +170,7 @@ Is there another bylaw topic I can help you with? I have information about utili
 }
 
 /**
- * Stream a response from the AI model
+ * Stream a response from the AI model using AI SDK
  * @param model The selected AI model configuration
  * @param messages The conversation history
  * @param relevantChunks Relevant bylaw chunks for context
@@ -185,7 +180,89 @@ export async function streamAIResponse(
   model: ModelConfig,
   messages: { role: string; content: string }[],
   relevantChunks: BylawChunk[]
-): Promise<string> {
-  // For now, we'll just call the non-streaming version
-  return generateAIResponse(model, messages, relevantChunks);
+) {
+  try {
+    // Create a context from the relevant chunks
+    let context = '';
+    if (relevantChunks.length > 0) {
+      context = 'Here are some relevant bylaw sections that may help answer the question:\n\n';
+      relevantChunks.forEach((chunk, index) => {
+        context += `Source ${index + 1}: ${chunk.metadata.title}, ${chunk.metadata.section}\n`;
+        context += `Content: ${chunk.content}\n`;
+        context += `Date: ${chunk.metadata.date}`;
+        if (chunk.metadata.lastAmended) {
+          context += `, Last Amended: ${chunk.metadata.lastAmended}`;
+        }
+        context += '\n\n';
+      });
+    }
+    
+    // Create a system message with instructions and context
+    const systemMessage = {
+      role: 'system',
+      content: `You are a helpful municipal bylaw assistant. Your purpose is to provide accurate information about municipal bylaws, regulations, and amendments.
+
+Always cite your sources using the format [citation: {"text": "exact text from bylaw", "source": "bylaw name", "section": "section number or name"}].
+
+If you're unsure about something, acknowledge the uncertainty rather than making up information.
+
+Focus on providing factual, up-to-date information based on the most recent amendments.
+
+${context}`
+    };
+    
+    // Prepare messages for the AI, including the system message with context
+    const aiMessages = [
+      systemMessage,
+      ...messages.filter(m => m.role !== 'system')
+    ];
+    
+    // Map model provider to AI SDK model
+    let aiModel;
+    let result;
+    
+    switch (model.provider) {
+      case 'anthropic':
+        // Use streamText for Claude
+        return streamText({
+          model: anthropic(model.model),
+          messages: aiMessages,
+          temperature: model.temperature,
+          maxTokens: model.maxTokens,
+          experimental_transform: (chunk) => {
+            // Apply smooth streaming
+            return chunk;
+          },
+          providerOptions: {
+            anthropic: {
+              thinking: { type: 'enabled', budgetTokens: 12000 },
+            },
+          },
+        });
+        
+      case 'xai':
+        // TODO: Add support for XAI (Grok) when available in AI SDK
+        throw new Error('XAI provider not yet implemented in AI SDK');
+        
+      case 'openai':
+      default:
+        // Use streamText for OpenAI
+        return streamText({
+          model: openai(model.model),
+          messages: aiMessages,
+          temperature: model.temperature,
+          maxTokens: model.maxTokens,
+          experimental_transform: (chunk) => {
+            // Apply smooth streaming
+            return chunk;
+          }
+        });
+    }
+    
+  } catch (error) {
+    console.error('Error generating streaming AI response:', error);
+    // For streaming errors, we can't really fall back to a simulated response
+    // So we'll throw the error to be handled by the caller
+    throw error;
+  }
 }

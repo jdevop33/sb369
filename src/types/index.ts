@@ -1,8 +1,12 @@
-export interface Message {
+import { Message as AIMessage } from 'ai';
+
+export interface Message extends AIMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt?: Date;
+  toolInvocations?: any[];
+  annotations?: Record<string, any>;
 }
 
 export interface Citation {
